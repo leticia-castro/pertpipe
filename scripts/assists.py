@@ -79,6 +79,8 @@ def check_dependencies(cmd_exec):
         version = result[0].replace("SPAdes genome assembler ", "")
     elif cmd_exec == "mlst":
         version = result[0].replace("mlst ", "v")
+        if pkg_resources.parse_version(version) < pkg_resources.parse_version("2.19"):
+            logging.warning("MLST version is older than v2.19. Database path handling may differ in older versions.")
     elif cmd_exec == 'minimap2':
         version = "v" + result[0]
     elif cmd_exec == 'prokka':
@@ -103,7 +105,7 @@ def check_dependencies(cmd_exec):
         sys.exit(1)
 
 def check_mlst(datadir):
-    if datadir is not None:    
+    if datadir is not None:
         result = subprocess.run(
             ["mlst", "--longlist", "--datadir", datadir],
             capture_output=True,
@@ -111,15 +113,25 @@ def check_mlst(datadir):
         )
     else:
         result = subprocess.run(
-            ["mlst --longlist | grep bpertussis"],
+            "mlst --longlist | grep bpertussis",
             capture_output=True,
             text=True,
+            shell=True,
         )
     if result.returncode > 0:
-        logging.critical("MLST database is not prepared")
+        logging.critical("MLST database is not prepared. The 'bpertussis' scheme was not found.")
         logging.critical(
-            "correct by running: mlst/scripts/mlst-make_blast_db"
+            "Please run setup.py first: python setup.py [optional datadir]"
         )
+        sys.exit(1)
+    elif "bpertussis" not in result.stdout:
+        logging.critical("MLST 'bpertussis' scheme not found in available schemes.")
+        logging.critical(
+            "Please run setup.py first: python setup.py [optional datadir]"
+        )
+        sys.exit(1)
+    else:
+        logging.info("MLST 'bpertussis' scheme is available.")
 
 def check_abricate():
     result = subprocess.run(
@@ -180,11 +192,22 @@ def check_prokka_finished(prokka_outdir, name):
         return False
 
 def check_kallisto_finished(analysis_outdir):
-    kallisto_log = os.path.join(analysis_outdir, "run_info.json")
-    if os.path.isfile(kallisto_log) and os.stat(kallisto_log).st_size != 0:
+    kallisto_abundance = os.path.join(analysis_outdir, "abundance.tsv")
+    if os.path.isfile(kallisto_abundance) and os.stat(kallisto_abundance).st_size != 0:
         return True
-    else:
+    return False
+
+
+def check_bam_readable(bam_file):
+    if not os.path.isfile(bam_file) or os.stat(bam_file).st_size == 0:
         return False
+    result = subprocess.run(
+        ["samtools", "view", "-H", bam_file],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    return result.returncode == 0
 
 def get_fasta_length(prn_type):
     length = 0
@@ -205,7 +228,7 @@ def get_fasta_length(prn_type):
                     sequence_length = 0
             elif found:
                 sequence_length += len(line.strip())
-    return length
+    return sequence_length
 
 def check_closed_genome(fasta, length_threshold=3900000):
     contig_count = 0

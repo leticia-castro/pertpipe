@@ -10,20 +10,55 @@ ref_list = os.path.join(os.path.dirname(os.path.dirname(__file__)), "databases/s
 kallisto_db = os.path.join(os.path.dirname(os.path.dirname(__file__)), "databases/SILVA_138.2_LSURef_NR99")
 
 
-def mres_map(reads1, reads2, outdir, mutation_list, meta):
+def mres_map(reads1, reads2, outdir, mutation_list, meta, threads=4):
     if meta is True:
+        kallisto_cmd = f"kallisto quant -i {kallisto_db} -o {outdir} {reads1} {reads2} --pseudobam"
         kallisto_result = assists.check_kallisto_finished(outdir)
         if kallisto_result is False:
-            kallisto_cmd = f"kallisto quant -i {kallisto_db} -o {outdir} {reads1} {reads2} --pseudobam"
-            assists.run_cmd(kallisto_cmd)
-        logging.info(f"Kallisto has already finished for this sample. Skipping.")
-        samtools_cmd_1 = f"samtools view -b -h -F 4 -L {ref_list} {outdir}/pseudoalignments.bam > {outdir}/kallisto_bor.bam"
-        samtools_cmd_2 = f"samtools fastq -1 {outdir}/kallisto_bor_R1.fastq -2 {outdir}/kallisto_bor_R2.fastq {outdir}/kallisto_bor.bam"
-        for cmd in [samtools_cmd_1, samtools_cmd_2]:
-            assists.run_cmd(cmd)
-        reads1 = f"{outdir}/kallisto_bor_R1.fastq"
-        reads2 = f"{outdir}/kallisto_bor_R2.fastq"
-    minimap2_cmd = f"minimap2 -ax sr {rrna_seq} {reads1} {reads2} | samtools view -b > {outdir}/23s_aln.bam"
+            try:
+                assists.run_cmd(kallisto_cmd)
+            except SystemExit:
+                if assists.check_kallisto_finished(outdir):
+                    logging.warning("Kallisto exited with non-zero status, but abundance.tsv exists. Continuing with available kallisto outputs.")
+                else:
+                    raise
+        else:
+            logging.info(f"Kallisto has already finished for this sample. Skipping.")
+
+        abundance_file = os.path.join(outdir, "abundance.tsv")
+        if os.path.exists(abundance_file):
+            import pandas as pd
+            abundance_df = pd.read_csv(abundance_file, sep="\t")
+            total_counts = abundance_df['est_counts'].sum()
+            if total_counts == 0:
+                logging.info("No reads pseudoaligned to SILVA database. Skipping read filtering and using original reads for 23S mapping.")
+            else:
+                pseudo_bam = os.path.join(outdir, "pseudoalignments.bam")
+                if not assists.check_bam_readable(pseudo_bam):
+                    if os.path.exists(pseudo_bam):
+                        os.remove(pseudo_bam)
+                    logging.info("Pseudoalignments BAM is unreadable. Re-running kallisto to regenerate it.")
+                    try:
+                        assists.run_cmd(kallisto_cmd)
+                    except SystemExit:
+                        logging.warning("Failed to regenerate pseudoalignments.bam. Using original reads for 23S mapping.")
+
+                if assists.check_bam_readable(pseudo_bam):
+                    samtools_cmd_1 = f"samtools view -b -h -F 4 -L {ref_list} {pseudo_bam} > {outdir}/kallisto_bor.bam"
+                    samtools_cmd_2 = f"samtools fastq -1 {outdir}/kallisto_bor_R1.fastq -2 {outdir}/kallisto_bor_R2.fastq {outdir}/kallisto_bor.bam"
+                    try:
+                        for cmd in [samtools_cmd_1, samtools_cmd_2]:
+                            assists.run_cmd(cmd)
+                        reads1 = f"{outdir}/kallisto_bor_R1.fastq"
+                        reads2 = f"{outdir}/kallisto_bor_R2.fastq"
+                    except Exception as e:
+                        logging.info(f"Failed to filter reads with samtools: {e}. Using original reads for 23S mapping.")
+                else:
+                    logging.info("Unable to create a readable pseudoalignments.bam. Using original reads for 23S mapping.")
+        else:
+            logging.info("Abundance file not found. Using original reads for 23S mapping.")
+            # Keep original reads1, reads2
+    minimap2_cmd = f"minimap2 -t {threads} -ax sr {rrna_seq} {reads1} {reads2} | samtools view -b > {outdir}/23s_aln.bam"
     assists.run_cmd(minimap2_cmd)
     samtools_sort_cmd = f"samtools sort {outdir}/23s_aln.bam > {outdir}/23s_aln.sort.bam"
     samtools_index_cmd = f"samtools index {outdir}/23s_aln.sort.bam"
@@ -132,7 +167,7 @@ def determine_copy_number(freq):
     elif 0.05 <= freq <= 0.316:
         return f"1 copy (Freq: {perc})"
     else:
-        return f"(Freq: {perc}"
+        return f"(Freq: {perc})"
 
 def map_calculations(bcftools_vcf, coverage):
     mres_df = pd.DataFrame()

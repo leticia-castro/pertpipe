@@ -70,6 +70,10 @@ def prn_type(blast_type, length):
                 [blast_type_filter[1].apply(lambda x: int(x.split('_')[1]) < 10)]
                 if not top_prn_under_10.empty:
                     prn_type = top_prn_under_10.loc[top_prn_under_10[11].idxmax()][1]
+                else:
+                    # fall back to overall best hit
+                    prn_type = blast_type_filter.loc[blast_type_filter[11].idxmax()][1]
+            prn_row = blast_type[blast_type[1] == prn_type]  # ← always set prn_row to the original blast_type filtered by prn_type, so that it will be consistent for downstream processing
         else:
             top_prn_under_10 = top_rows[top_rows[1].apply(lambda x: int(x.split('_')[1]) < 10)]
             if not top_prn_under_10.empty:
@@ -78,7 +82,7 @@ def prn_type(blast_type, length):
     else:
         prn_row = None
         prn_type = None
-        logging.critical(f"YOU FUCKED UP AND DIDN'T CATCH THIS EDGE CASE")
+        logging.critical(f"Unhandled PRN typing edge case: no matching PRN type found for length='{length}'. Please investigate the BLAST results.")
     if prn_type is None and prn_row.empty:
         prn_type = None
     else:
@@ -248,38 +252,20 @@ def dupe_type(prn_promoter, prn_row, is_prn, prn_type):
                     logging.info("IS elements found, however they are different IS elements.")
             elif contains_irl and not contains_irr:
                 logging.info("Only one section of the IS element detected.")
-                irl_string = filt_is_prn[filt_is_prn[1].str.contains('_IRL')].iloc[0][1].rstrip('_IRL') + "fwd"
-                if row[6] < row[7]:
-                    irl_ins_pos = int(row[7])
-                elif row[6] > row[7]:
-                    irl_ins_pos = int(row[6])
+                if row[8] < row[9]:
+                    prn_cut_start = int(row[8])
                 else:
-                    irl_ins_pos = None
-                if is_prn.iloc[0][6] < is_prn.iloc[0][7]:
-                    logging.info(f"IS481 Insertion postion: {int(is_prn.iloc[0][6])}, IS481 Starting Position: {irl_ins_pos}")
-                    mut_type = irl_string
-                elif is_prn.iloc[0][6] > is_prn.iloc[0][7]:
-                    logging.info(f"IS481 Insertion postion: {int(is_prn.iloc[0][7])}, IS481 Starting Position: {irl_ins_pos}")
-                    mut_type = irl_string
-                else:
-                    irl_ins_pos = None
+                    prn_cut_start = int(row[9])
+                mut_type = "IS481"
+                logging.info(f"IS481 Insertion detected. Using PRN subject start position: {prn_cut_start}")
             elif contains_irr and not contains_irl:
                 logging.info("Only one section of the IS element detected.")
-                irr_string = filt_is_prn[filt_is_prn[1].str.contains('_IRR')].iloc[0][1].rstrip('_IRR') + "rev"
-                if row[6] < row[7]:
-                    irl_ins_pos = int(row[6])
-                elif row[6] > row[7]:
-                    irl_ins_pos = int(row[7])
+                if row[8] < row[9]:
+                    prn_cut_start = int(row[8])
                 else:
-                    irl_ins_pos = None
-                if is_prn.iloc[0][6] < is_prn.iloc[0][7]:
-                    logging.info(f"IS481 Insertion postion: {int(is_prn.iloc[0][6])}, IS481 Starting Position: {irl_ins_pos}")
-                    mut_type = irr_string
-                elif is_prn.iloc[0][6] > is_prn.iloc[0][7]:
-                    logging.info(f"IS481 Insertion postion: {int(is_prn.iloc[0][7])}, IS481 Starting Position: {irl_ins_pos}")
-                    mut_type = irr_string
-                else:
-                    irl_ins_pos = None
+                    prn_cut_start = int(row[9])
+                mut_type = "IS481"
+                logging.info(f"IS481 Insertion detected. Using PRN subject start position: {prn_cut_start}")
             else:
                 logging.info(f"Nothing")
     if prn_type is not None:
@@ -288,6 +274,8 @@ def dupe_type(prn_promoter, prn_row, is_prn, prn_type):
     return prn_type
     
 def promoter_scan(prn_promoter, prn_row, prn_type):
+    prn_cut_start = None
+    prn_cut_end = None
     prn_type_mod = prn_type + "_IR_PRN"
     prn_results = prn_promoter[prn_promoter[1] == prn_type_mod]
     if prn_results.empty:
@@ -320,6 +308,11 @@ def promoter_scan(prn_promoter, prn_row, prn_type):
         elif row[8] < row[9]:
             prn_cut_end = row[8] - 333
             logging.info(f"prn_cut_end: {prn_cut_end}")
+
+    if prn_cut_start is None or prn_cut_end is None:
+        logging.warning(f"Unable to infer full promoter cut coordinates (start={prn_cut_start}, end={prn_cut_end}). Returning base PRN type {prn_type}.")
+        return prn_type
+
     if prn_cut_start == 3080 and prn_cut_end == -332:
         mut_type = "full"
         prn_type = match_known_prn(mut_type, prn_type, prn_cut_start, prn_cut_end)
@@ -327,7 +320,7 @@ def promoter_scan(prn_promoter, prn_row, prn_type):
         logging.info("Deletion likely, setting to deletion")
         mut_type = "del"
         prn_type = match_known_prn(mut_type, prn_type, prn_cut_start, prn_cut_end)
-    
+
     return prn_type
 
 def extract_prn(assembly, prn_promoter_xml, prn_promoter, prn_outdir, length):

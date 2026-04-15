@@ -7,14 +7,14 @@ from Bio.Seq import Seq
 
 
 rrna_seq = os.path.join(os.path.dirname(os.path.dirname(__file__)), "databases/23S_rRNA.fasta")
-def mres_detection(assembly, outdir, meta):
+def mres_detection(assembly, outdir, meta, threads=4):
     hit_list = []
     mutation_list = []
     mutation_counter = 0
     detected = False
-    blast_cmd = f"blastn -task megablast -query {assembly} -subject {rrna_seq} -outfmt 6 -out {outdir}/blast_23s.txt"
+    blast_cmd = f"blastn -task megablast -num_threads {threads} -query {assembly} -subject {rrna_seq} -outfmt 6 -out {outdir}/blast_23s.txt"
     assists.run_cmd(blast_cmd)
-    blast_cmd_2 = f"blastn -task megablast -query {assembly} -subject {rrna_seq} -outfmt 5 -out {outdir}/blast_23s.xml"
+    blast_cmd_2 = f"blastn -task megablast -num_threads {threads} -query {assembly} -subject {rrna_seq} -outfmt 5 -out {outdir}/blast_23s.xml"
     assists.run_cmd(blast_cmd_2)
     if meta: 
         try:
@@ -42,24 +42,44 @@ def mres_detection(assembly, outdir, meta):
                 logging.info(f'Full length 23s rRNA detected, with no mutations')
                 mutation_list = []
                 detected = True
-            elif perc_id >= 99 and perc_id < 100 and aln_len >= 2880 and aln_len <= 2885:
+            elif perc_id >= 99.9 and perc_id < 100 and aln_len >= 2880 and aln_len <= 2885:
                 logging.info(f'23s rRNA detected with mutations')
-                xml_handle = open(f"{outdir}/blast_23s.xml")
-                blast_xml = NCBIXML.parse(xml_handle)
-                mutation_counter += 1
-                mutations = mres_position(blast_xml, hit_list)
-                mutation_list.extend(mutations)
-                logging.info(f"{mutation_list}")
+                try:
+                    with open(f"{outdir}/blast_23s.xml") as xml_handle:
+                        blast_xml = NCBIXML.parse(xml_handle)
+                        mutation_counter += 1
+                        mutations = mres_position(blast_xml, hit_list)
+                        mutation_list.extend(mutations)
+                        logging.info(f"{mutation_list}")
+                except Exception as e:
+                    logging.warning(f"Failed to parse BLAST XML for 23S mutations: {e}. Assuming mutations present but unable to specify.")
+                    mutation_list.append("Unknown")  # Indicate mutations detected but not specified
                 detected = True
             else:
                 logging.error(f"Encountered issue, potentially truncated 23S rRNA detected, or error in assembly occurred.")
                 detected = False
     else:
         logging.info(f"No 23S rRNA detected through Blast")
+        
+    # unique_mutations = list(set(mutation_list))
+    # logging.info(f"Final mutation list: {unique_mutations}")
+    # vdomain_start, vdomain_end = 1918, 2444
+    # return unique_mutations, mutation_counter, detected
+
     unique_mutations = list(set(mutation_list))
-    logging.info(f"Final mutation list: {unique_mutations}")
     vdomain_start, vdomain_end = 1918, 2444
-    return unique_mutations, mutation_counter, detected
+    vdomain_mutations = []
+    for m in unique_mutations:
+        digits = ''.join(filter(str.isdigit, m))
+        if digits:
+            try:
+                pos = int(digits)
+                if vdomain_start <= pos <= vdomain_end:
+                    vdomain_mutations.append(m)
+            except ValueError:
+                pass  # Skip invalid mutations
+    logging.info(f"Final V domain mutation list: {vdomain_mutations}")
+    return vdomain_mutations, mutation_counter, detected
     
 def mres_position(blast_xml, hit_list):
     for blast_result in blast_xml:
@@ -89,5 +109,5 @@ def mres_position(blast_xml, hit_list):
                         ]
                         return formatted_positions
                     else:
-                        logging.error("IDK WHAT HAPPENED CODE IS BONKED")
+                        logging.error(f"Unexpected BLAST alignment: length={hsp.align_length}, strand={hsp.strand}. Could not determine 23S rRNA mutation positions.")
     

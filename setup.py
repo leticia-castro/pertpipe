@@ -29,7 +29,11 @@ def pertpipe_setup(datadir):
         logging.info(f"Datadir is not set, using default MLST location")
         result = subprocess.run('mlst -h', stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, text=True)
         if result.returncode == 0:
-            match = re.search(r'--datadir\s+\[X\]\s+PubMLST data\s+\(default\s+\'([^\']+)\'\)', result.stdout)
+            # mlst writes help to stderr, not stdout
+            match = re.search(r'--datadir\s+\[X\]\s+PubMLST data\s+\(default\s+\'([^\']+)\'\)', result.stderr)
+            if match is None:
+                logging.error("Could not parse mlst --datadir path from help output. Try running: mlst -h")
+                sys.exit(1)
             default_mlst_path = match.group(1)
         else:
             logging.error(f"Error finding path with 'which': {result.stderr}")
@@ -42,20 +46,19 @@ def pertpipe_setup(datadir):
         sys.exit(2)
 
     new_destination = default_mlst_path + "/bpertussis"
-    if not os.path.isdir(new_destination):
-        logging.info(f"Creating 'bpertussis' folder in {default_mlst_path}")
-        os.makedirs(new_destination)
-        try:
-            shutil.copytree(bpertussis_db, new_destination,dirs_exist_ok=True)
-            logging.info(f"Copied {bpertussis_db} to {new_destination}")
-        except FileExistsError:
-            logging.error(f"Destination folder {new_destination} already exists")
-        except PermissionError:
-            logging.error(f"Permission denied while copying {bpertussis_db} to {new_destination}")
-        except Exception as e:
-            logging.error(f"An error occurred while copying {bpertussis_db} to {new_destination}")
-    else:
-        logging.info(f"{new_destination} already exists")
+    # Always copy so a previously failed/partial setup doesn't leave a blocking empty dir.
+    # dirs_exist_ok=True makes this safe to call repeatedly.
+    logging.info(f"Copying bpertussis database to {new_destination}")
+    os.makedirs(new_destination, exist_ok=True)
+    try:
+        shutil.copytree(bpertussis_db, new_destination, dirs_exist_ok=True)
+        logging.info(f"Copied {bpertussis_db} to {new_destination}")
+    except PermissionError:
+        logging.error(f"Permission denied copying {bpertussis_db} to {new_destination}")
+        sys.exit(1)
+    except Exception as e:
+        logging.error(f"Error copying {bpertussis_db} to {new_destination}: {e}")
+        sys.exit(1)
 
     # run the makemlstdb thingo
     bpertussis_mlst = None
@@ -80,28 +83,33 @@ def pertpipe_setup(datadir):
             else:
                 logging.error(f"{file} does not exist! check if it is missing in the database folder {bpertussis_db}")
                 sys.exit(3)
-    
+
     cmd_list = [
         f"mlst-make_blast_db",
         f"mlst --longlist | grep bpertussis"
     ]
     expected_result = 'bpertussis\tBPagST\tptxP\tptxA\tptxB\tptxC\tptxD\tptxE\tfhaB24005550\tfim2\tfim3\t23SrRNA\n'
     check_existing = subprocess.run(cmd_list[1], stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, text=True)
-    if check_existing.returncode != 0:
-        for cmd in cmd_list:
-            mlst_result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, text=True)
-            if mlst_result.returncode == 0:
-                logging.info(f"Successfully run {cmd}")
-            else:
-                logging.error(f"{mlst_result.stderr}")
-            bpertussis_mlst = mlst_result.stdout
-        
-            if bpertussis_mlst == expected_result:
-                logging.info(f"Successfully created 'bpertussis' mlst scheme" )
-            else:
-                logging.critical(f"Unsuccessful creation of MLST scheme")
+    if check_existing.returncode != 0 or "bpertussis" not in check_existing.stdout:
+        logging.info("bpertussis scheme not found, building BLAST database...")
+        # Step 1: build the BLAST database
+        makedb_result = subprocess.run(cmd_list[0], stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, text=True)
+        if makedb_result.returncode == 0:
+            logging.info(f"Successfully ran {cmd_list[0]}")
+        else:
+            logging.error(f"mlst-make_blast_db failed: {makedb_result.stderr}")
+            logging.error("Ensure mlst is installed correctly and the bpertussis folder was copied to the correct location.")
+            sys.exit(1)
+        # Step 2: verify the scheme is now available
+        verify_result = subprocess.run(cmd_list[1], stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, text=True)
+        if verify_result.returncode == 0 and "bpertussis" in verify_result.stdout:
+            logging.info("Successfully created 'bpertussis' MLST scheme")
+        else:
+            logging.critical(f"MLST scheme creation failed. Expected 'bpertussis' in scheme list but got: {verify_result.stdout}")
+            logging.critical("Try manually running: mlst-make_blast_db && mlst --longlist | grep bpertussis")
+            sys.exit(1)
     else:
-        logging.info(f"MLST Scheme already exists")
+        logging.info(f"MLST scheme already exists")
 
     # test MLST cos having issues with ptxA being ~33 not 1.
     pert_test = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tests/CIDM-MRBP01.fna")
@@ -153,7 +161,7 @@ def pertpipe_setup(datadir):
     try:
         with open(dest_md5, 'r') as f:
             expected_md5 = f.read().strip().split()[0]
-        
+
         hash_md5 = hashlib.md5()
         with open(dest_lsu, "rb") as f:
             for chunk in iter(lambda: f.read(4096), b""):
@@ -168,7 +176,7 @@ def pertpipe_setup(datadir):
     except Exception as e:
         print(f"Error occurred during checksum verification: {e}")
         raise
-    
+
     # kallisto setup
     lsu_data = dest_lsu.strip('.gz')
     with gzip.open(dest_lsu, 'rb') as f_in:
@@ -181,7 +189,7 @@ def pertpipe_setup(datadir):
         result = subprocess.run(kallisto_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, text=True)
     else:
         logging.info("Kallisto Index already exists.")
-    
+
     logging.info(f"Set-up complete :)")
 
 datadir = None
