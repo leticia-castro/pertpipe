@@ -198,11 +198,14 @@ def virulence_analysis(assembly, prn_outdir, closed, datadir, prokka_outdir, thr
                         fhab_len = "abnormal"
                     fhaB_type = prn_assists.fhaB_type(rows_with_max_value, fhab_len)
                 else:
-                    logging.info(f"Abnormal number {len(rows_with_max_value)} of fhaB genes detected please investigate.")
-                    fhaB_type = "Abnormal"
+                    # Handle truncated single fhaB gene
+                    logging.info(f"Truncated fhaB gene detected")
+                    fhab_len = "truncated"
+                    fhaB_type = prn_assists.fhaB_type(rows_with_max_value, fhab_len)
             else:
-                logging.warning(f"'COVERAGE' column not found in VFDB output for fhaB. Assuming abnormal.")
-                fhaB_type = "Abnormal"
+                logging.warning(f"'COVERAGE' column not found in VFDB output for fhaB. Assuming truncated.")
+                fhab_len = "truncated"
+                fhaB_type = prn_assists.fhaB_type(rows_with_max_value, fhab_len)
         if len(fhaB_vfdb) > 1:
             if 'COVERAGE' in fhaB_vfdb.columns and any(fhaB_vfdb["COVERAGE"] == "1-10773/10773"):
                 fhaB_full_length = fhaB_vfdb[fhaB_vfdb["COVERAGE"] == "1-10773/10773"].reset_index()

@@ -172,8 +172,18 @@ def pertpipe(args):
     else:
         logging.info(f"Analysis folder exists")
     
+    # Initialize final_dict with all possible keys and default values
     final_dict = {
-        "Folder": maindir
+        "Folder": maindir,
+        "ptxP": "N/A",
+        "ptx_toxin": "N/A",
+        "prn": "Not Detected",
+        "fim2": "N/A",
+        "fim3": "N/A",
+        "fhaB": "Not Detected",
+        "Resistance": "Susceptible",
+        "Mutation": "N/A",
+        "Copy No": "N/A"
     }
 
     res_dict = virulence_info.virulence_analysis(assembly, prn_outdir, closed, args.datadir, prokka_outdir, args.threads)
@@ -242,11 +252,11 @@ def pertpipe(args):
             }
     final_dict.update(res_dict)
 
-    # Extract headers and values
-    headers = list(final_dict.keys())
-    values = list(final_dict.values())
+    # Extract headers and values in fixed order
+    headers = ["Folder", "ptxP", "ptx_toxin", "prn", "fim2", "fim3", "fhaB", "Resistance", "Mutation", "Copy No"]
+    values = [final_dict[key] for key in headers]
 
-    tsv_lines = ["\t".join(headers), "\t".join(values)]
+    tsv_lines = ["\t".join(headers), "\t".join(str(v) for v in values)]
     tsv_string = "\n".join(tsv_lines)
     output_path = outdir + "/vir_res.tsv"
     with open(output_path, 'w') as output_file:
