@@ -358,11 +358,29 @@ def extract_prn(assembly, prn_promoter_xml, prn_promoter, prn_outdir, length):
             logging.info(f"Writing extracted {length} length PRN sequence to {prn_file}")
     return prn_outdir + "/prn_only.fasta"
 
+# def fhaB_type(fhaB_df, fhab_len):
+#     if fhab_len == "full":
+#         fhaB_type = fhaB_df[1][0]
+#     elif fhab_len == "truncated":
+#         fhaB_type = f"~{fhaB_df[1][0]} (Truncated)"
+#     else:
+#         fhaB_type = fhab_len
+#     return fhaB_type
+
 def fhaB_type(fhaB_df, fhab_len):
+    # Ensure we always work with a DataFrame
+    if isinstance(fhaB_df, pd.Series):
+        fhaB_df = fhaB_df.to_frame().T
+
+    # Reset index so row 0 always exists
+    fhaB_df = fhaB_df.reset_index(drop=True)
+
+    # Column 1 is the allele name (fhaB1, fhaB3, etc.)
+    allele = fhaB_df.iloc[0, 1]
+
     if fhab_len == "full":
-        fhaB_type = fhaB_df[1][0]
+        return allele
     elif fhab_len == "truncated":
-        fhaB_type = f"~{fhaB_df[1][0]} (Truncated)"
+        return f"~{allele} (Truncated)"
     else:
-        fhaB_type = fhab_len
-    return fhaB_type
+        return fhab_len
