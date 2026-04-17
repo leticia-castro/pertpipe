@@ -184,17 +184,21 @@ def virulence_analysis(assembly, prn_outdir, closed, datadir, prokka_outdir, thr
     fhaB_type = "Not Detected"
 
     if not any(file is None for file in file_vars):
+        # --- CASE 1: VFDB has exactly one fhaB hit ---
         if len(fhaB_vfdb) == 1:
             max_value = fhaB_type_info[11].max()
             rows_with_max_value = fhaB_type_info[fhaB_type_info[11] == max_value]
             if 'COVERAGE' in fhaB_vfdb.columns:
                 coverage = fhaB_vfdb['COVERAGE'][0]
                 if len(rows_with_max_value) == 1 and coverage == '1-10773/10773':
+                    # Full-length single hit
                     max_length = rows_with_max_value.iloc[0][3]
                     if max_length > 10700:
                         fhab_len = "full"
                         logging.info(f"Full length fhaB gene detected")
                     else:
+                        # Handle abnormal full-length hit                       
+                        logging.warning(f"Full length fhaB gene detected but length is shorter than expected. Marking as abnormal.")
                         fhab_len = "abnormal"
                     fhaB_type = prn_assists.fhaB_type(rows_with_max_value, fhab_len)
                 else:
@@ -206,22 +210,32 @@ def virulence_analysis(assembly, prn_outdir, closed, datadir, prokka_outdir, thr
                 logging.warning(f"'COVERAGE' column not found in VFDB output for fhaB. Assuming truncated.")
                 fhab_len = "truncated"
                 fhaB_type = prn_assists.fhaB_type(rows_with_max_value, fhab_len)
-        if len(fhaB_vfdb) > 1:
+        # --- CASE 2: VFDB has multiple fhaB hits ---
+        elif len(fhaB_vfdb) > 1:                
             if 'COVERAGE' in fhaB_vfdb.columns and any(fhaB_vfdb["COVERAGE"] == "1-10773/10773"):
-                fhaB_full_length = fhaB_vfdb[fhaB_vfdb["COVERAGE"] == "1-10773/10773"].reset_index()
-                fhaB_contig_name = fhaB_full_length['SEQUENCE'][0]
-                logging.info(f"Full length fhaB gene detected")
+                # Full-length hit present
+                fhaB_full_length = fhaB_vfdb[fhaB_vfdb["COVERAGE"] == "1-10773/10773"].reset_index(drop=True)
+                fhaB_contig_name = fhaB_full_length['SEQUENCE'].iloc[0]
+                logging.info("Full length fhaB gene detected")
                 fhab_len = "full"
                 row_with_seq_name = fhaB_type_info[fhaB_type_info[0] == fhaB_contig_name]
                 max_value = fhaB_type_info[11].max()
-                rows_with_max_value = row_with_seq_name[row_with_seq_name[11] == max_value]
-                fhaB_type = prn_assists.fhaB_type(rows_with_max_value, fhab_len)
+                rows_with_max_value = row_with_seq_name[row_with_seq_name[11] == max_value].reset_index(drop=True)
+                fhaB_type = prn_assists.fhaB_type(rows_with_max_value, fhab_len)    
             else:
-                logging.info(f"fhaB gene truncated, getting best hit")
+                # Multiple hits but none full-length → truncated
+                logging.info("fhaB gene truncated, selecting best BLAST hit")
                 fhab_len = "truncated"
                 max_value = fhaB_type_info[11].max()
-                rows_with_max_value = fhaB_type_info[fhaB_type_info[11] == max_value].reset_index()
+                rows_with_max_value = fhaB_type_info[fhaB_type_info[11] == max_value].reset_index(drop=True)
                 fhaB_type = prn_assists.fhaB_type(rows_with_max_value, fhab_len)
+            # --- CASE 3: VFDB has NO fhaB hits but BLAST DOES ---
+        elif len(fhaB_vfdb) == 0 and len(fhaB_type_info) > 0:
+            logging.info("VFDB has no fhaB hits, but BLAST found truncated fhaB fragments")
+            fhab_len = "truncated"
+            max_value = fhaB_type_info[11].max()
+            rows_with_max_value = fhaB_type_info[fhaB_type_info[11] == max_value].reset_index(drop=True)
+            fhaB_type = prn_assists.fhaB_type(rows_with_max_value, fhab_len)
     else:
         fhaB_type = "Not Detected"
     
