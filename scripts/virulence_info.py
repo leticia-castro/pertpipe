@@ -189,7 +189,7 @@ def virulence_analysis(assembly, prn_outdir, closed, datadir, prokka_outdir, thr
             max_value = fhaB_type_info[11].max()
             rows_with_max_value = fhaB_type_info[fhaB_type_info[11] == max_value]
             if 'COVERAGE' in fhaB_vfdb.columns:
-                coverage = fhaB_vfdb['COVERAGE'][0]
+                coverage = fhaB_vfdb['COVERAGE'].iloc[0]
                 if len(rows_with_max_value) == 1 and coverage == '1-10773/10773':
                     # Full-length single hit
                     max_length = rows_with_max_value.iloc[0][3]
@@ -264,4 +264,3 @@ def virulence_analysis(assembly, prn_outdir, closed, datadir, prokka_outdir, thr
         "fhaB": fhaB_type
     }
     return virulence_info
-   
