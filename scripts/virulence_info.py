@@ -190,7 +190,7 @@ def virulence_analysis(assembly, prn_outdir, closed, datadir, prokka_outdir, thr
             if 'COVERAGE' in fhaB_vfdb.columns:
                 coverage = fhaB_vfdb['COVERAGE'][0]
                 if len(rows_with_max_value) == 1 and coverage == '1-10773/10773':
-                    max_length = rows_with_max_value[3][0]
+                    max_length = rows_with_max_value.iloc[0][3]
                     if max_length > 10700:
                         fhab_len = "full"
                         logging.info(f"Full length fhaB gene detected")
