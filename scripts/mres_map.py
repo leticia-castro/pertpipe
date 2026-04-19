@@ -27,7 +27,7 @@ def mres_map(reads1, reads2, outdir, mutation_list, meta, threads=4):
 
         abundance_file = os.path.join(outdir, "abundance.tsv")
         if os.path.exists(abundance_file):
-            import pandas as pd
+            # import pandas as pd
             abundance_df = pd.read_csv(abundance_file, sep="\t")
             total_counts = abundance_df['est_counts'].sum()
             if total_counts == 0:
@@ -156,7 +156,7 @@ def vcf_calc_and_blast_match(bcftools_vcf, mutation_list, coverage):
             "Mutation": positions,
             "Copy No": f"{str(copy_no)} copies",
         }
-    return final_df, result_dict
+:n
 
 def determine_copy_number(freq):
     perc = '{:.1%}'.format(freq)
