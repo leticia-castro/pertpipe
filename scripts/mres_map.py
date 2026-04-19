@@ -156,7 +156,6 @@ def vcf_calc_and_blast_match(bcftools_vcf, mutation_list, coverage):
             "Mutation": positions,
             "Copy No": f"{str(copy_no)} copies",
         }
-:n
 
 def determine_copy_number(freq):
     perc = '{:.1%}'.format(freq)
