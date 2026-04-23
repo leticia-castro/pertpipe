@@ -171,9 +171,11 @@ def virulence_analysis(assembly, prn_outdir, closed, datadir, prokka_outdir, thr
         prn_row = prn_type = "Not Detected"
     if prn_row is None or prn_type is None:
         prn_row = prn_type = "Not Detected"
+        
     # run fhaB checking now.
     try:
         fhaB_type_info = pd.read_csv(f"{prn_outdir}/blast_fhaB_type.txt", sep="\t", header=None)
+        fhaB_type_info[[2,3]] = fhaB_type_info[[2,3]].apply(pd.to_numeric, errors="coerce")
         fhaB_type_xml = open(f"{prn_outdir}/blast_fhaB_type.xml")
         fhaB_vfdb = vfdb_info[vfdb_info['GENE'].str.contains('fhaB')].reset_index() 
     except Exception as e:
@@ -229,13 +231,33 @@ def virulence_analysis(assembly, prn_outdir, closed, datadir, prokka_outdir, thr
                 max_value = fhaB_type_info[11].max()
                 rows_with_max_value = fhaB_type_info[fhaB_type_info[11] == max_value].reset_index(drop=True)
                 fhaB_type = prn_assists.fhaB_type(rows_with_max_value, fhab_len)
-            # --- CASE 3: VFDB has NO fhaB hits but BLAST DOES ---
+        # --- CASE 3: VFDB has NO fhaB hits but BLAST has truncated hits ---
         elif len(fhaB_vfdb) == 0 and len(fhaB_type_info) > 0:
-            logging.info("VFDB has no fhaB hits, but BLAST found truncated fhaB fragments")
-            fhab_len = "truncated"
-            max_value = fhaB_type_info[11].max()
-            rows_with_max_value = fhaB_type_info[fhaB_type_info[11] == max_value].reset_index(drop=True)
-            fhaB_type = prn_assists.fhaB_type(rows_with_max_value, fhab_len)
+            # extract alignment lengths and percent identities
+            pid_col = 2
+            alen_col = 3
+            lengths = fhaB_type_info[alen_col].tolist()
+            # --- CASE 4: hybridisation capture signature ---
+            has_7240 = 7240 in lengths
+            has_2633 = 2633 in lengths
+            rows_7240 = fhaB_type_info[fhaB_type_info[alen_col] == 7240]
+            rows_2633 = fhaB_type_info[fhaB_type_info[alen_col] == 2633]
+            # pid_7240_is_100 = not rows_7240.empty and all(rows_7240[pid_col] == 100)
+            # pid_2633_is_100 = not rows_2633.empty and all(rows_2633[pid_col] == 100)
+            pid_7240_is_100 = any(rows_7240[pid_col] == 100)
+            pid_2633_is_100 = any(rows_2633[pid_col] == 100)
+            if has_7240 and has_2633 and pid_7240_is_100 and pid_2633_is_100:
+                # HC artefact → full
+                fhab_len = "full"
+                logging.info("Detected HC signature (7240 + 2633 @ 100%). Marking as full.")
+                best_hit = rows_7240.iloc[0]
+                fhaB_type = prn_assists.fhaB_type(best_hit.to_frame().T, fhab_len)
+            else:
+                # true truncated
+                fhab_len = "truncated"
+                best_hit = fhaB_type_info.sort_values(by=alen_col, ascending=False).iloc[0]
+                logging.info(f"BLAST fragments do not match HC signature. Longest = {best_hit[alen_col]} bp. Marking as truncated.")
+                fhaB_type = prn_assists.fhaB_type(best_hit.to_frame().T, fhab_len)  
     else:
         fhaB_type = "Not Detected"
     
