@@ -312,7 +312,7 @@ def virulence_analysis(assembly, prn_outdir, closed, datadir, prokka_outdir, thr
     # final dictionary to be returned.
     virulence_info = {
         "st": st,
-        "mlst_alleles": alleles
+        "mlst_alleles": alleles,
         "ptxP": ptxp,
         "ptx_toxin": ptx_toxin,
         "prn": prn_type,
