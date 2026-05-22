@@ -10,7 +10,7 @@ from scripts import virulence_info
 from scripts import mres_blast
 from scripts import mres_map
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 warnings.simplefilter(action="ignore", category=FutureWarning)
 logging.getLogger().setLevel(logging.INFO)
 formatter = logging.Formatter(
