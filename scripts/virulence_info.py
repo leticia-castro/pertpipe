@@ -39,6 +39,7 @@ def virulence_analysis(assembly, prn_outdir, closed, datadir, prokka_outdir, thr
         assists.run_cmd(mlst_datadir_cmd)
     else:
         assists.run_cmd(mlst_cmd)
+        assists.run_cmd(mlst_cmd_std)
 
     mandatory_files = [
         f"{prn_outdir}/vfdb.txt", 
