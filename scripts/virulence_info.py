@@ -21,7 +21,7 @@ def virulence_analysis(assembly, prn_outdir, closed, datadir, prokka_outdir, thr
     mlst_cmd = f"mlst --scheme bpertussis --threads {threads} {assembly} > {prn_outdir}/mlst.txt"
     mlst_datadir_cmd = f"mlst --scheme bpertussis --threads {threads} --datadir {datadir}/pubmlst --blastdb {datadir}/blast/mlst.fa {assembly} > {prn_outdir}/mlst.txt"
     blast_cmds = [
-        f"blastn -task megablast -num_threads {threads} -query {assembly} -subject {prn_seq} -outfmt 6 -out {prn_outdir}/blast_prn.txt",either file is does not exist or is empty, please check files. Exiting.
+        f"blastn -task megablast -num_threads {threads} -query {assembly} -subject {prn_seq} -outfmt 6 -out {prn_outdir}/blast_prn.txt",
         f"blastn -task megablast -num_threads {threads} -query {assembly} -subject {prn_seq} -outfmt 5 -out {prn_outdir}/blast_prn.xml",
         f"blastn -task megablast -num_threads {threads} -query {assembly} -subject {prn_type_seq} -outfmt 6 -min_raw_gapped_score 100 -out {prn_outdir}/blast_prn_type.txt",
         f"blastn -task megablast -num_threads {threads} -query {assembly} -subject {prn_type_seq} -outfmt 5 -min_raw_gapped_score 100 -out {prn_outdir}/blast_prn_type.xml",
