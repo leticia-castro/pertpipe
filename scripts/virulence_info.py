@@ -86,15 +86,15 @@ def virulence_analysis(assembly, prn_outdir, closed, datadir, prokka_outdir, thr
     # add guard in case PRN typing fails due to absent or short PRN hits
     if any(x is None for x in [prn_vfdb, prn_type_info, prn_promoter]):
         logging.warning("PRN typing failed: missing or empty PRN files. Marking PRN as absent.")
-        return {
-            "prn_type": None,
-            "prn_len": 0,
-            "prn_present": False
-            }
+        prn_type = None
+        prn_len = 0
+        prn_present = False
+    else:
+        prn_len = len(prn_vfdb)
+        prn_present = True
 
-    prn_len = len(prn_vfdb)
     # Check if blast has prn type data even if vfdb doesn't
-    if prn_len == 0 and os.path.isfile(f"{prn_outdir}/blast_prn_type.txt") and os.stat(f"{prn_outdir}/blast_prn_type.txt").st_size != 0:
+    if prn_present and prn_len == 0 and os.path.isfile(f"{prn_outdir}/blast_prn_type.txt") and os.stat(f"{prn_outdir}/blast_prn_type.txt").st_size != 0:
         try:
             temp_prn_type_info = pd.read_csv(f"{prn_outdir}/blast_prn_type.txt", sep="\t", header=None)
             if not temp_prn_type_info.empty:
@@ -324,7 +324,9 @@ def virulence_analysis(assembly, prn_outdir, closed, datadir, prokka_outdir, thr
         "mlst_alleles": alleles,
         "ptxP": ptxp,
         "ptx_toxin": ptx_toxin,
-        "prn": prn_type,
+        "prn_type": prn_type,
+        "prn_len": prn_len,
+        "prn_present": prn_present,
         "fim2": fim2,
         "fim3": fim3,
         "fhaB": fhaB_type,
