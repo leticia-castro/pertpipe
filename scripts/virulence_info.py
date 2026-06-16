@@ -83,7 +83,15 @@ def virulence_analysis(assembly, prn_outdir, closed, datadir, prokka_outdir, thr
         vfdb_info, prn_vfdb, prn_type_info, prn_type_xml, prn_promoter, prn_xml = None, None, None, None, None, None
     file_vars = [vfdb_info, prn_vfdb, prn_type_info, prn_type_xml, prn_promoter, prn_xml]
     
-    
+    # add guard in case PRN typing fails due to absent or short PRN hits
+    if any(x is None for x in [prn_vfdb, prn_type_info, prn_promoter]):
+        logging.warning("PRN typing failed: missing or empty PRN files. Marking PRN as absent.")
+        return {
+            "prn_type": None,
+            "prn_len": 0,
+            "prn_present": False
+            }
+
     prn_len = len(prn_vfdb)
     # Check if blast has prn type data even if vfdb doesn't
     if prn_len == 0 and os.path.isfile(f"{prn_outdir}/blast_prn_type.txt") and os.stat(f"{prn_outdir}/blast_prn_type.txt").st_size != 0:
