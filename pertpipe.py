@@ -10,7 +10,7 @@ from scripts import virulence_info
 from scripts import mres_blast
 from scripts import mres_map
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 warnings.simplefilter(action="ignore", category=FutureWarning)
 logging.getLogger().setLevel(logging.INFO)
 formatter = logging.Formatter(
@@ -175,6 +175,8 @@ def pertpipe(args):
     # Initialize final_dict with all possible keys and default values
     final_dict = {
         "Folder": maindir,
+        "st": "N/A",
+        "mlst_alleles":"N/A",
         "ptxP": "N/A",
         "ptx_toxin": "N/A",
         "prn": "Not Detected",
@@ -253,7 +255,7 @@ def pertpipe(args):
     final_dict.update(res_dict)
 
     # Extract headers and values in fixed order
-    headers = ["Folder", "ptxP", "ptx_toxin", "prn", "fim2", "fim3", "fhaB", "Resistance", "Mutation", "Copy No"]
+    headers = ["Folder", "st", "mlst_alleles", "ptxP", "ptx_toxin", "prn", "fim2", "fim3", "fhaB", "Resistance", "Mutation", "Copy No"]
     values = [final_dict[key] for key in headers]
 
     tsv_lines = ["\t".join(headers), "\t".join(str(v) for v in values)]

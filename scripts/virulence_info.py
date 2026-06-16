@@ -15,6 +15,9 @@ is_elements = os.path.join(os.path.dirname(os.path.dirname(__file__)), "database
 def virulence_analysis(assembly, prn_outdir, closed, datadir, prokka_outdir, threads=4):
     # commands needed for prn analysis
     abricate_cmd = f"abricate --datadir {assists.bor_vfdb_db} --db bp-only_vfdb --quiet {assembly} > {prn_outdir}/vfdb.txt"
+    #add std mlst vs bordetella_3 scheme
+    mlst_cmd_std = f"mlst --scheme bordetella_3 --threads {threads} {assembly} > {prn_outdir}/mlst_std.txt"
+    #run mlst tool for custom bpertussis antigen serotyping BPagST
     mlst_cmd = f"mlst --scheme bpertussis --threads {threads} {assembly} > {prn_outdir}/mlst.txt"
     mlst_datadir_cmd = f"mlst --scheme bpertussis --threads {threads} --datadir {datadir}/pubmlst --blastdb {datadir}/blast/mlst.fa {assembly} > {prn_outdir}/mlst.txt"
     blast_cmds = [
@@ -36,10 +39,12 @@ def virulence_analysis(assembly, prn_outdir, closed, datadir, prokka_outdir, thr
         assists.run_cmd(mlst_datadir_cmd)
     else:
         assists.run_cmd(mlst_cmd)
+        assists.run_cmd(mlst_cmd_std)
 
     mandatory_files = [
         f"{prn_outdir}/vfdb.txt", 
-        f"{prn_outdir}/mlst.txt"
+        f"{prn_outdir}/mlst.txt",
+        f"{prn_outdir}/mlst_std.txt"
     ]
 
     optional_files = [
@@ -78,7 +83,15 @@ def virulence_analysis(assembly, prn_outdir, closed, datadir, prokka_outdir, thr
         vfdb_info, prn_vfdb, prn_type_info, prn_type_xml, prn_promoter, prn_xml = None, None, None, None, None, None
     file_vars = [vfdb_info, prn_vfdb, prn_type_info, prn_type_xml, prn_promoter, prn_xml]
     
-    
+    # add guard in case PRN typing fails due to absent or short PRN hits
+    if any(x is None for x in [prn_vfdb, prn_type_info, prn_promoter]):
+        logging.warning("PRN typing failed: missing or empty PRN files. Marking PRN as absent.")
+        return {
+            "prn_type": None,
+            "prn_len": 0,
+            "prn_present": False
+            }
+
     prn_len = len(prn_vfdb)
     # Check if blast has prn type data even if vfdb doesn't
     if prn_len == 0 and os.path.isfile(f"{prn_outdir}/blast_prn_type.txt") and os.stat(f"{prn_outdir}/blast_prn_type.txt").st_size != 0:
@@ -287,7 +300,13 @@ def virulence_analysis(assembly, prn_outdir, closed, datadir, prokka_outdir, thr
     #name = os.path.basename(os.path.dirname(prokka_outdir))
     #prokka_gbk, contig_prokka_map = assists.contig_prokka_tag(assembly, name, prokka_outdir)
     #draw_figure.draw_clinker(prn_type, prn_outdir, prokka_gbk, contig_prokka_map)
-
+    
+  # add std MLST typing info
+    mlst_info_std = pd.read_csv(f"{prn_outdir}/mlst_std.txt", sep="\t", header=None)
+    st = mlst_info_std.iloc[0, 2]
+    allele_cols = mlst_info_std.iloc[0, 3:]
+    alleles = ''.join(allele_cols)
+    
     # filling the remaining information from MLST/Virulence gene types
     mlst_info = pd.read_csv(f"{prn_outdir}/mlst.txt", sep="\t", header=None)
 
@@ -301,11 +320,14 @@ def virulence_analysis(assembly, prn_outdir, closed, datadir, prokka_outdir, thr
 
     # final dictionary to be returned.
     virulence_info = {
+        "st": st,
+        "mlst_alleles": alleles,
         "ptxP": ptxp,
         "ptx_toxin": ptx_toxin,
         "prn": prn_type,
         "fim2": fim2,
         "fim3": fim3,
-        "fhaB": fhaB_type
+        "fhaB": fhaB_type,
+
     }
     return virulence_info
